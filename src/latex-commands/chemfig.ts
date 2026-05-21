@@ -258,7 +258,6 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
   const bondLength = 0.5;
   const atomGap = 0.1;
   const atomCenterY = baseline - LABEL_ASCENT / 2 + 0.08;
-  const hasBranches = structure.atoms.some((atom) => atom.branches.length > 0);
 
   let x = 0;
   const parts: string[] = [];
@@ -304,7 +303,7 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
     parts.join(''),
     bounds,
     selected,
-    hasBranches ? 0.4 : 0.5
+    depthForBaseline(bounds, baseline)
   );
 }
 
@@ -431,6 +430,10 @@ function makeMeasuredChemfigSvgBox(
     depth,
     selected
   );
+}
+
+function depthForBaseline(bounds: SvgBounds, baseline: number): number {
+  return Math.max(0.25, bounds.maxY - baseline + SVG_Y_PADDING);
 }
 
 function createSvgBounds(): SvgBounds {
