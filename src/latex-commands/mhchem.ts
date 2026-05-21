@@ -21,20 +21,318 @@ import type { Box } from '../core/box';
 
 import { defineFunction } from './definitions-utils';
 
+const EDITABLE_CHEM_OUTPUT_TYPES = new Set([
+  'chemfive',
+  'rm',
+  'text',
+  'roman numeral',
+  'state of aggregation',
+  'state of aggregation subscript',
+  'bond',
+  'arrow',
+  'operator',
+  'space',
+  'entitySkip',
+  'hyphen',
+  'addition compound',
+  'electron dot',
+  'KV x',
+  'prime',
+  'cdot',
+  'tight cdot',
+  'times',
+  'circa',
+  '^',
+  'v',
+  'ellipsis',
+  '/',
+  ' / ',
+]);
+
+function parseBalancedGroup(
+  s: string,
+  start: number,
+  open = '{',
+  close = '}'
+): { body: string; end: number } | undefined {
+  if (s[start] !== open) return undefined;
+
+  let depth = 0;
+  for (let i = start; i < s.length; i++) {
+    if (s[i] === '\\') {
+      i += 1;
+      continue;
+    }
+    if (s[i] === open) depth += 1;
+    else if (s[i] === close) {
+      depth -= 1;
+      if (depth === 0) return { body: s.slice(start + 1, i), end: i };
+    }
+  }
+
+  return undefined;
+}
+
+function stripBalancedOuterBraces(s: string): string {
+  let result = s.trim();
+  while (result.startsWith('{')) {
+    const group = parseBalancedGroup(result, 0);
+    if (!group || group.end !== result.length - 1) break;
+    result = group.body.trim();
+  }
+  return result;
+}
+
+function replaceCommandArgument(
+  s: string,
+  command: string,
+  replace: (body: string) => string,
+  options: { optionalArgument?: boolean } = {}
+): string {
+  const needle = '\\' + command;
+  let result = '';
+  let cursor = 0;
+
+  while (cursor < s.length) {
+    const commandStart = s.indexOf(needle, cursor);
+    if (commandStart < 0) {
+      result += s.slice(cursor);
+      break;
+    }
+
+    result += s.slice(cursor, commandStart);
+    let pos = commandStart + needle.length;
+
+    if (options.optionalArgument && s[pos] === '[') {
+      const optional = parseBalancedGroup(s, pos, '[', ']');
+      if (optional) pos = optional.end + 1;
+    }
+
+    while (s[pos] === ' ') pos += 1;
+
+    const group = parseBalancedGroup(s, pos);
+    if (!group) {
+      result += needle;
+      cursor = pos;
+      continue;
+    }
+
+    result += replace(group.body);
+    cursor = group.end + 1;
+  }
+
+  return result;
+}
+
+function replaceLowerCommand(s: string): string {
+  let result = '';
+  let cursor = 0;
+
+  while (cursor < s.length) {
+    const commandStart = s.indexOf('\\lower', cursor);
+    if (commandStart < 0) {
+      result += s.slice(cursor);
+      break;
+    }
+
+    result += s.slice(cursor, commandStart);
+    let pos = commandStart + '\\lower'.length;
+    while (pos < s.length && s[pos] !== '{') pos += 1;
+
+    const group = parseBalancedGroup(s, pos);
+    if (!group) {
+      result += s.slice(commandStart, pos);
+      cursor = pos;
+      continue;
+    }
+
+    result += group.body;
+    cursor = group.end + 1;
+  }
+
+  return result;
+}
+
+function replaceExtensibleArrow(s: string, command: string, mhchemArrow: string) {
+  const needle = '\\' + command;
+  let result = '';
+  let cursor = 0;
+
+  while (cursor < s.length) {
+    const commandStart = s.indexOf(needle, cursor);
+    if (commandStart < 0) {
+      result += s.slice(cursor);
+      break;
+    }
+
+    result += s.slice(cursor, commandStart);
+    let pos = commandStart + needle.length;
+    let below = '';
+
+    if (s[pos] === '[') {
+      const optional = parseBalancedGroup(s, pos, '[', ']');
+      if (optional) {
+        below = stripBalancedOuterBraces(optional.body);
+        pos = optional.end + 1;
+      }
+    }
+
+    const aboveGroup = parseBalancedGroup(s, pos);
+    if (!aboveGroup) {
+      result += needle;
+      cursor = pos;
+      continue;
+    }
+
+    const above = stripBalancedOuterBraces(aboveGroup.body);
+    result += ` ${mhchemArrow}${above ? `[${above}]` : ''}${
+      below ? `[${below}]` : ''
+    } `;
+    cursor = aboveGroup.end + 1;
+  }
+
+  return result;
+}
+
+function replaceSimpleCommands(s: string): string {
+  let result = s;
+  let previous = '';
+  let guard = 0;
+
+  while (result !== previous && guard < 12) {
+    previous = result;
+    guard += 1;
+
+    result = replaceLowerCommand(result);
+    result = replaceCommandArgument(result, 'smash', (body) => body, {
+      optionalArgument: true,
+    });
+    result = replaceCommandArgument(result, 'vphantom', () => '');
+    result = replaceCommandArgument(result, 'hphantom', () => '');
+    result = replaceCommandArgument(result, 'llap', (body) => body);
+    result = replaceCommandArgument(result, 'rlap', (body) => body);
+    result = replaceCommandArgument(result, 'mathrel', (body) => body);
+    result = replaceCommandArgument(result, 'mathrm', (body) => body);
+    result = replaceCommandArgument(result, 'operatorname', (body) => body);
+    result = replaceCommandArgument(result, 'text', (body) => body);
+  }
+
+  return result;
+}
+
+function serializeChemLatex(latex: string): string {
+  let result = latex;
+
+  result = replaceExtensibleArrow(result, 'xrightarrow', '->');
+  result = replaceExtensibleArrow(result, 'xleftarrow', '<-');
+  result = replaceSimpleCommands(result);
+
+  result = result
+    .replace(/\\textstyle/g, '')
+    .replace(/\\(?:mkern|mskip)[\d.]+mu\s*/g, ' ')
+    .replace(/\\,/g, ' ')
+    .replace(/~/g, ' ')
+    .replace(/\\longrightarrow|\\rightarrow/g, '->')
+    .replace(/\\longleftarrow|\\leftarrow/g, '<-')
+    .replace(/\\longleftrightarrow|\\leftrightarrow/g, '<->')
+    .replace(/\\longrightleftharpoons|\\rightleftharpoons/g, '<=>')
+    .replace(/\\Rightleftharpoons/g, '<=>>')
+    .replace(/\\Leftrightharpoons/g, '<<=>')
+    .replace(/\\uparrow\s*\{\}/g, '^')
+    .replace(/\\downarrow\s*\{\}/g, 'v')
+    .replace(/\\uparrow/g, '^')
+    .replace(/\\downarrow/g, 'v')
+    .replace(/\\equiv/g, '#')
+    .replace(/\\cdot/g, '.')
+    .replace(/\\times/g, 'x')
+    .replace(/\\pm/g, '+-')
+    .replace(/\\approx/g, ' approx ');
+
+  result = replaceSimpleCommands(result);
+
+  result = result
+    .replace(/_\{([^{}]*)\}/g, '$1')
+    .replace(/_([A-Za-z0-9()+\-])/g, '$1')
+    .replace(/\^\{([^{}]*)\}/g, '^$1')
+    .replace(/\^([A-Za-z0-9()+\-])/g, '^$1')
+    .replace(/\{\}([+\-=<>])\{\}/g, ' $1 ')
+    .replace(/\{\}/g, '')
+    .replace(/\{\\equiv\}/g, '#')
+    .replace(/\{([+\-=#<>])\}/g, '$1');
+
+  let previous = '';
+  let guard = 0;
+  while (result !== previous && guard < 12) {
+    previous = result;
+    guard += 1;
+    result = result.replace(
+      /\{([A-Za-z0-9+\-=#<>.,;:()[\]\s^/\u00b7\u4e00-\u9fff]+)\}/g,
+      '$1'
+    );
+  }
+
+  result = result
+    .replace(
+      /\s*(<=>|<->|->|<-)(\[[^\]]*\])?(\[[^\]]*\])?\s*/g,
+      (_match, arrow, above = '', below = '') => ` ${arrow}${above}${below} `
+    )
+    .replace(/\s+\+\s+/g, ' + ')
+    .replace(/\b(\d+)\s+([A-Z])/g, '$1$2')
+    .replace(/\s+/g, ' ')
+    .replace(/([A-Za-z0-9)])([v^])$/g, '$1 $2')
+    .replace(/\s+([\]^])/g, ' $1')
+    .trim();
+
+  return result;
+}
+
+function isEditableChemOutput(value: unknown): boolean {
+  if (value === null || value === undefined) return true;
+  if (typeof value === 'string') return true;
+  if (Array.isArray(value)) return value.every(isEditableChemOutput);
+  if (typeof value !== 'object') return true;
+
+  const object = value as Record<string, unknown>;
+  if (
+    typeof object.type_ === 'string' &&
+    !EDITABLE_CHEM_OUTPUT_TYPES.has(object.type_)
+  )
+    return false;
+
+  for (const [key, child] of Object.entries(object)) {
+    if (key === 'type_' || key === 'kind_' || key.endsWith('Type')) continue;
+    if (!isEditableChemOutput(child)) return false;
+  }
+
+  return true;
+}
+
+function isEditableChemFormula(
+  command: string,
+  arg: string,
+  parsed: unknown
+): boolean {
+  if (command !== '\\ce') return false;
+  if (!arg || arg.length > 512) return false;
+  if (/[\\$&]/.test(arg)) return false;
+
+  return isEditableChemOutput(parsed);
+}
+
 export class ChemAtom extends Atom {
   private arg: string;
+  private editable: boolean;
   private _verbatimLatex: string;
   constructor(command: string, arg: string) {
-    super({ type: 'chem' }, { command, mode: 'math' });
-    const tex = texify.go(
-      mhchemParser.go(arg, command === '\\pu' ? 'pu' : 'ce'),
-      false
-    );
+    super({ type: 'chem', command, mode: 'math' });
+    const parsed = mhchemParser.go(arg, command === '\\pu' ? 'pu' : 'ce');
+    const tex = texify.go(parsed, false);
 
     this.body = parseLatex(tex);
     this._verbatimLatex = command + '{' + arg + '}';
     this.arg = arg;
-    this.captureSelection = true;
+    this.editable = isEditableChemFormula(command, arg, parsed);
+    this.captureSelection = !this.editable;
   }
 
   static fromJson(json: AtomJson): ChemAtom {
@@ -45,11 +343,16 @@ export class ChemAtom extends Atom {
   // once it is set in the ctor, it is immutable.
   set verbatimLatex(_latex: string | undefined) {}
   get verbatimLatex(): string | undefined {
-    return this._verbatimLatex;
+    if (!this.editable) return this._verbatimLatex;
+    return this.command + '{' + this.serializeArg() + '}';
   }
 
   toJson(): AtomJson {
-    return { ...super.toJson(), arg: this.arg };
+    return {
+      ...super.toJson(),
+      arg: this.editable ? this.serializeArg() : this.arg,
+      editable: this.editable,
+    };
   }
 
   render(context: Context): Box {
@@ -62,8 +365,18 @@ export class ChemAtom extends Atom {
     return this.bind(context, box)!;
   }
   _serialize(_options: ToLatexOptions): string {
-    console.assert(this.verbatimLatex !== undefined);
-    return this.verbatimLatex!;
+    if (!this.editable) return this._verbatimLatex;
+    return this.command + '{' + this.serializeArg(_options) + '}';
+  }
+
+  private serializeArg(options?: ToLatexOptions): string {
+    return serializeChemLatex(
+      Atom.serialize(this.body, {
+        ...options,
+        defaultMode: 'math',
+        skipStyles: true,
+      })
+    );
   }
 }
 

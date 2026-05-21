@@ -161,6 +161,48 @@ describe('MATHRM SERIALIZATION (issue #2818)', () => {
   });
 });
 
+describe('CHEM SERIALIZATION', () => {
+  function serialize(latex: string): string {
+    const atoms = parseLatex(latex, { parseMode: 'math' });
+    return Atom.serialize(atoms, { defaultMode: 'math' });
+  }
+
+  test.each([
+    '\\ce{2H2 + O2 -> 2H2O}',
+    '\\ce{CaCO3 ->[高温] CaO + CO2 ^}',
+    '\\ce{SO4^2- + Ba^2+ -> BaSO4 v}',
+  ])('%#/ %p preserves editable K12 mhchem source', (input) => {
+    const atom = parseLatex(input, { parseMode: 'math' })[0];
+    expect(atom.captureSelection).toBe(false);
+    expect(serialize(input)).toBe(input);
+  });
+
+  test('editable mhchem body serializes from current content', () => {
+    const atom = parseLatex('\\ce{2H2 + O2 -> 2H2O}', {
+      parseMode: 'math',
+    })[0];
+
+    atom.body = parseLatex(
+      '3\\mathrm{H}_{2}+\\mathrm{O}_{2}\\longrightarrow2\\mathrm{H}_{2}\\mathrm{O}',
+      { parseMode: 'math' }
+    );
+
+    expect(Atom.serialize([atom], { defaultMode: 'math' })).toBe(
+      '\\ce{3H2+O2 -> 2H2O}'
+    );
+  });
+
+  test('complex mhchem and physical units keep whole-object editing', () => {
+    expect(
+      parseLatex('\\ce{\\frac{1}{2}H2 + O2}', { parseMode: 'math' })[0]
+        .captureSelection
+    ).toBe(true);
+    expect(
+      parseLatex('\\pu{10 m/s}', { parseMode: 'math' })[0].captureSelection
+    ).toBe(true);
+  });
+});
+
 describe('REST* ARGUMENT COMMANDS (issue #2570)', () => {
   // Commands with {:rest*} deferred arguments should handle braced arguments
   test.each([

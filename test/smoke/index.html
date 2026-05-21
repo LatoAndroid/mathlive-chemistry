@@ -360,7 +360,20 @@
 
       const latex = mf.getValue("latex-expanded");
       try {
-        setHtml("latex", mf.getValue("latex-expanded"));
+        setHtml("latex", latex);
+
+        if (hasMhchemCommand(latex)) {
+          const message = "Not available for mhchem formulas.";
+          setHtml("typst", message);
+          setHtml("ascii-math", message);
+          setHtml("mathml", message);
+          document.getElementById("mathml-render").innerHTML = "";
+          setHtml("math-json", message);
+          document.getElementById("result").innerText = "";
+          document.getElementById("result-latex").innerText = "";
+          return;
+        }
+
         setHtml("typst", mf.getValue("typst"));
         setHtml("ascii-math", mf.getValue("ascii-math"));
         setHtml("mathml", mf.getValue("math-ml"));
@@ -379,6 +392,10 @@
       } catch (e) {
         console.error("Error converting", e.toString());
       }
+    }
+
+    function hasMhchemCommand(latex) {
+      return /\\(?:ce|pu)\s*\{/.test(latex);
     }
 
 
