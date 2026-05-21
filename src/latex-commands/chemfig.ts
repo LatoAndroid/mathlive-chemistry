@@ -252,7 +252,8 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
   const baseline = 0;
   const bondLength = 0.5;
   const atomGap = 0.1;
-  const atomCenterY = baseline - LABEL_ASCENT / 2;
+  const atomCenterY = baseline - LABEL_ASCENT / 2 + 0.08;
+  const hasBranches = structure.atoms.some((atom) => atom.branches.length > 0);
 
   let x = 0;
   const parts: string[] = [];
@@ -268,13 +269,14 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
       const branch = atom.branches[j];
       const centerX = x + width / 2;
       const direction = j % 2 === 0 ? -1 : 1;
-      const startY = atomCenterY + direction * 0.2;
+      const startY =
+        direction < 0 ? atomCenterY - 0.34 : atomCenterY + 0.42;
       const labelY =
-        direction < 0 ? atomCenterY - 0.78 : atomCenterY + 1.02;
+        direction < 0 ? atomCenterY - 0.82 : atomCenterY + 1.82;
       const endY =
         direction < 0
-          ? labelY + LABEL_DESCENT + 0.07
-          : labelY - LABEL_ASCENT - 0.07;
+          ? labelY + LABEL_DESCENT + 0.08
+          : labelY - LABEL_ASCENT - 0.08;
 
       parts.push(drawBond(centerX, startY, centerX, endY, branch.bond));
       parts.push(renderFormulaText(branch.label, centerX, labelY, 'middle'));
@@ -293,7 +295,12 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
     }
   }
 
-  return makeMeasuredChemfigSvgBox(parts.join(''), bounds, selected);
+  return makeMeasuredChemfigSvgBox(
+    parts.join(''),
+    bounds,
+    selected,
+    hasBranches ? 0.4 : 0.5
+  );
 }
 
 function renderRing(structure: RingChemfig, selected: boolean): Box {
@@ -375,7 +382,7 @@ function makeChemfigSvgBox(
       classes: ['ML__chemfig', classes].filter(Boolean).join(' '),
       isSelected: selected,
       maxFontSize: 0,
-      type: 'inner',
+      type: 'ord',
     }
   );
   box.width = width;
@@ -392,14 +399,14 @@ function makeChemfigSvgBox(
 function makeMeasuredChemfigSvgBox(
   svg: string,
   bounds: SvgBounds,
-  selected: boolean
+  selected: boolean,
+  depth = 0.4
 ): Box {
   const padding = 0.3;
   const shiftX = padding - bounds.minX;
   const shiftY = padding - bounds.minY;
   const width = bounds.maxX - bounds.minX + padding * 2;
   const totalHeight = bounds.maxY - bounds.minY + padding * 2;
-  const depth = 0.4;
 
   return makeChemfigSvgBox(
     `<g transform="translate(${toSvgNumber(shiftX)}, ${toSvgNumber(
@@ -602,7 +609,7 @@ function mergeAdjacentFormulaRuns(runs: FormulaRun[]): FormulaRun[] {
 
 function estimateFormulaWidth(label: string): number {
   return parseFormulaRuns(label).reduce(
-    (acc, run) => acc + run.text.length * (run.subscript ? 0.3 : 0.5),
+    (acc, run) => acc + run.text.length * (run.subscript ? 0.3 : 0.58),
     0.1
   );
 }
