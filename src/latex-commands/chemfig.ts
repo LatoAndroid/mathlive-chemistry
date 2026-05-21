@@ -50,10 +50,7 @@ const SUBSCRIPT_FONT_SIZE = 0.62;
 const LABEL_ASCENT = 0.9;
 const LABEL_DESCENT = 0.24;
 const SVG_X_PADDING = 0.04;
-const SVG_Y_PADDING = 0.12;
-const TEXT_BOUND_PADDING = 0.05;
-const LABEL_GLYPH_WIDTH = 0.64;
-const SUBSCRIPT_GLYPH_WIDTH = 0.32;
+const SVG_Y_PADDING = 0.3;
 
 export class ChemfigAtom extends Atom {
   private readonly arg: string;
@@ -257,7 +254,7 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
   const baseline = 0;
   const bondLength = 0.5;
   const atomGap = 0.1;
-  const atomCenterY = baseline - LABEL_ASCENT / 2 + 0.08;
+  const atomCenterY = baseline - LABEL_ASCENT / 2;
 
   let x = 0;
   const parts: string[] = [];
@@ -273,14 +270,13 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
       const branch = atom.branches[j];
       const centerX = x + width / 2;
       const direction = j % 2 === 0 ? -1 : 1;
-      const startY =
-        direction < 0 ? atomCenterY - 0.34 : atomCenterY + 0.42;
+      const startY = atomCenterY + direction * 0.2;
       const labelY =
-        direction < 0 ? atomCenterY - 0.82 : atomCenterY + 1.82;
+        direction < 0 ? atomCenterY - 0.78 : atomCenterY + 1.02;
       const endY =
         direction < 0
-          ? labelY + LABEL_DESCENT + 0.08
-          : labelY - LABEL_ASCENT - 0.08;
+          ? labelY + LABEL_DESCENT + 0.07
+          : labelY - LABEL_ASCENT - 0.07;
 
       parts.push(drawBond(centerX, startY, centerX, endY, branch.bond));
       parts.push(renderFormulaText(branch.label, centerX, labelY, 'middle'));
@@ -299,12 +295,7 @@ function renderLinear(structure: LinearChemfig, selected: boolean): Box {
     }
   }
 
-  return makeMeasuredChemfigSvgBox(
-    parts.join(''),
-    bounds,
-    selected,
-    depthForBaseline(bounds, baseline)
-  );
+  return makeMeasuredChemfigSvgBox(parts.join(''), bounds, selected);
 }
 
 function renderRing(structure: RingChemfig, selected: boolean): Box {
@@ -314,7 +305,6 @@ function renderRing(structure: RingChemfig, selected: boolean): Box {
   const vertices: { x: number; y: number }[] = [];
   const parts: string[] = [];
   const bounds = createSvgBounds();
-  const branchBaselines: number[] = [];
 
   for (let i = 0; i < structure.size; i++) {
     const angle = -Math.PI / 6 + (i * 2 * Math.PI) / structure.size;
@@ -356,18 +346,9 @@ function renderRing(structure: RingChemfig, selected: boolean): Box {
     parts.push(renderFormulaText(branch.label, label.x, label.y, anchor));
     includeLineBounds(bounds, from.x, from.y, to.x, to.y);
     includeTextBounds(bounds, branch.label, label.x, label.y, anchor);
-    if (anchor !== 'middle') branchBaselines.push(label.y);
   }
 
-  const depth =
-    branchBaselines.length > 0
-      ? Math.max(
-          0.25,
-          Math.min(0.55, bounds.maxY - branchBaselines[0] + SVG_Y_PADDING)
-        )
-      : 0.4;
-
-  return makeMeasuredChemfigSvgBox(parts.join(''), bounds, selected, depth);
+  return makeMeasuredChemfigSvgBox(parts.join(''), bounds, selected);
 }
 
 function renderUnsupportedChemfig(arg: string, selected: boolean): Box {
@@ -396,7 +377,7 @@ function makeChemfigSvgBox(
       classes: ['ML__chemfig', classes].filter(Boolean).join(' '),
       isSelected: selected,
       maxFontSize: 0,
-      type: 'ord',
+      type: 'inner',
     }
   );
   box.width = width;
@@ -413,13 +394,13 @@ function makeChemfigSvgBox(
 function makeMeasuredChemfigSvgBox(
   svg: string,
   bounds: SvgBounds,
-  selected: boolean,
-  depth = 0.4
+  selected: boolean
 ): Box {
   const shiftX = SVG_X_PADDING - bounds.minX;
   const shiftY = SVG_Y_PADDING - bounds.minY;
   const width = bounds.maxX - bounds.minX + SVG_X_PADDING * 2;
   const totalHeight = bounds.maxY - bounds.minY + SVG_Y_PADDING * 2;
+  const depth = 0.4;
 
   return makeChemfigSvgBox(
     `<g transform="translate(${toSvgNumber(shiftX)}, ${toSvgNumber(
@@ -430,10 +411,6 @@ function makeMeasuredChemfigSvgBox(
     depth,
     selected
   );
-}
-
-function depthForBaseline(bounds: SvgBounds, baseline: number): number {
-  return Math.max(0.25, bounds.maxY - baseline + SVG_Y_PADDING);
 }
 
 function createSvgBounds(): SvgBounds {
@@ -471,19 +448,11 @@ function includeTextBounds(
   y: number,
   anchor: 'start' | 'middle' | 'end'
 ): void {
-  const width = estimateFormulaWidth(label);
+  const width = estimateFormulaWidth(label) + 0.22;
   const minX =
-    anchor === 'end'
-      ? x - width - TEXT_BOUND_PADDING
-      : anchor === 'middle'
-        ? x - width / 2 - TEXT_BOUND_PADDING
-        : x - TEXT_BOUND_PADDING;
+    anchor === 'end' ? x - width : anchor === 'middle' ? x - width / 2 : x;
   const maxX =
-    anchor === 'end'
-      ? x + TEXT_BOUND_PADDING
-      : anchor === 'middle'
-        ? x + width / 2 + TEXT_BOUND_PADDING
-        : x + width + TEXT_BOUND_PADDING;
+    anchor === 'end' ? x : anchor === 'middle' ? x + width / 2 : x + width;
 
   includePoint(bounds, minX, y - LABEL_ASCENT);
   includePoint(bounds, maxX, y + LABEL_DESCENT);
@@ -634,10 +603,7 @@ function mergeAdjacentFormulaRuns(runs: FormulaRun[]): FormulaRun[] {
 
 function estimateFormulaWidth(label: string): number {
   return parseFormulaRuns(label).reduce(
-    (acc, run) =>
-      acc +
-      run.text.length *
-        (run.subscript ? SUBSCRIPT_GLYPH_WIDTH : LABEL_GLYPH_WIDTH),
+    (acc, run) => acc + run.text.length * (run.subscript ? 0.3 : 0.5),
     0.1
   );
 }
