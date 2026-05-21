@@ -1,7 +1,7 @@
 {
-  "name": "mathlive",
-  "version": "0.109.2",
-  "description": "A web component for math input",
+  "name": "mathlive-chemistry",
+  "version": "0.109.2-k12.0",
+  "description": "A MathLive fork with lightweight K12 chemistry formula support",
   "license": "MIT",
   "funding": {
     "type": "individual",
@@ -48,9 +48,9 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/arnog/mathlive.git"
+    "url": "git+https://github.com/LatoAndroid/mathlive.git"
   },
-  "bugs": "https://github.com/arnog/mathlive/issues/",
+  "bugs": "https://github.com/LatoAndroid/mathlive/issues/",
   "scripts": {
     "doc": "bash ./scripts/update-docs.sh",
     "build": "bash ./scripts/build.sh",
@@ -170,6 +170,11 @@
     "tex",
     "mathjax",
     "katex",
-    "mathquill"
+    "mathquill",
+    "chemistry",
+    "mhchem",
+    "chemfig",
+    "k12",
+    "whiteboard"
   ]
 }
