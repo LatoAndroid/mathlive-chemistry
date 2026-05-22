@@ -1,6 +1,6 @@
 {
   "name": "mathlive-chemistry",
-  "version": "0.109.2-k12.0",
+  "version": "0.109.2-k12.1",
   "description": "A MathLive fork with lightweight K12 chemistry formula support",
   "license": "MIT",
   "funding": {
